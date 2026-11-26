@@ -6361,7 +6361,7 @@ if (!S.badges) { S.badges = badgeList().filter((b) => b[3] >= b[4]).map((b) => b
 function shareAuto() {
   if (!NATIVE || !Android.shareInfo || !Android.voiceShare) return;
   let i = {}; try { i = JSON.parse(Android.shareInfo()); } catch { return; }
-  if (!i.on || i.running || Date.now() - (i.at || 0) < 10 * 60e3) return;
+  if (i.running || (i.on && Date.now() - (i.at || 0) < 10 * 60e3)) return;   // ١.٩٧: بدون مفتاح كمان (يشيك على المفتاح المشفّر)
   try {
     let names = []; try { names = String(store.get('packNames', 'ميلا')).split(/[،,\s]+/).filter(Boolean); } catch {}
     const cand = new Set();
