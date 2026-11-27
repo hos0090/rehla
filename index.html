@@ -2352,7 +2352,7 @@ function webAdult() {
 function meView() {
   $('#view').innerHTML = `<div class="inner">${header()}<div class="today glass"><div class="lt girl2"><img src="${ART.girl}" alt=""></div><div class="tx"><small>رحلتي</small><b>${AR(Object.keys(S.stars).length)} حرف · ${AR(total())} نجمة</b><div class="bar"><i style="width:${Object.keys(S.stars).length / 28 * 100}%"></i></div></div></div>
     ${winsHtml()}<div class="sec"><h2>صلاتي اليوم</h2></div><div class="prrow me">${PR_N.map((n, k) => `<button class="${prDay()[k] ? 'on' : ''}" data-p="${k}">🕌<br>${n}</button>`).join('')}</div>
-    <div class="sec"><h2>للكبار</h2></div><button class="game glass wide" id="pr" style="min-height:110px"><div class="art" style="background:linear-gradient(140deg,#6b7a99,#38425e)">${ic('shield')}</div><b>ركن بابا وماما</b><small>التقدم بالتفصيل والإعدادات</small></button></div>`;
+    <div class="sec"><h2>للكبار</h2></div><button class="game glass wide" id="pr" style="min-height:110px"><div class="art" style="background:linear-gradient(140deg,#6b7a99,#38425e)">${ic('shield')}</div><b>${NATIVE ? 'ركن بابا وماما' : 'للكبار'}</b><small>${NATIVE ? 'التقدم بالتفصيل والإعدادات' : 'الاسم والمستوى'}</small></button></div>`;
   $('#pr').onclick = NATIVE ? gate : webAdult;
   document.querySelectorAll('.prrow.me button').forEach((b) => (b.onclick = () => { sfx('tap'); salahCall(+b.dataset.p); }));
   if ($('#gOpen')) $('#gOpen').onclick = openGift;
@@ -3072,6 +3072,10 @@ function playAya(s, a, token) {
 }
 const wait = (ms, token) => new Promise((r) => { const t0 = Date.now(); const tick = () => { if (token !== qAbort) return r(); const b = $('#qb'); if (b) b.style.width = Math.min(100, (Date.now() - t0) / ms * 100) + '%'; if (Date.now() - t0 >= ms) r(); else requestAnimationFrame(tick); }; tick(); });
 function ayaHtml(text, num, hide) { const ws = text.split(/\s+/); return `<div class="aya glass" id="aya">${ws.map((w, i) => `<span class="w ${hide && i > 0 ? 'hid' : ''}" data-w="${i}">${w}</span>`).join(' ')}<span class="num">﴿${AR(num)}﴾</span></div>`; }
+/** ٢.١: بومي تقول وش المطلوب بصوتها في الحفظ، وننتظرها تخلص قبل الخطوة الجاية */
+const qSayT = (t) => t;
+const qSay = (t, token) => new Promise((res) => { if (token !== qAbort) return res(); speak(t, .9); afterTalk(res, 9000); });
+const Q_SAY = ['الآية الجاية، اسمعي وركّزي', 'يلا، ردّديها بصوت عالي', 'مرة ثانية، ردّديها', 'سمّعي الآية من حفظك', 'نربط الآيات، اسمعي من البداية', 'سمّعيها من حفظك بدون ما تشوفين'];
 async function hifz(si) {
   const su = JUZ[si], prog = qprog(su.n), token = ++qAbort, R = qset().rep;
   let reveals = 0;
@@ -3079,11 +3083,13 @@ async function hifz(si) {
   const start = Math.min(prog.done, su.v.length - 1);
   const stage = $('#stage');
   const phases = ['اسمعي', 'ردّدي', 'سمّعي', 'اربطي'];
+  try { if (NATIVE && Android.voicePrefetch) Android.voicePrefetch(JSON.stringify(Q_SAY)); } catch {}
   const head = (p, a) => `<div class="q">${su.name} · الآية ${AR(a + 1)} من ${AR(su.v.length)}</div><div class="phase">${phases.map((x, i) => `<div class="${i === p ? 'on' : i < p ? 'ok' : ''}">${x}</div>`).join('')}</div>`;
   for (let a = start; a < su.v.length; a++) {
     if (token !== qAbort) return;
     $('#pg').style.width = (a / su.v.length * 100) + '%';
-    // ١) تسمع الآية مكررة
+    // ١) تسمع الآية مكررة (أول آية: الشيخ يبدأ على طول عشان الصوت يشتغل من لمستها)
+    if (a > start) { stage.innerHTML = `${head(0, a)}${ayaHtml(su.v[a], a + 1, false)}<div class="turn">اسمعي وركّزي</div>`; await qSay(qSayT(Q_SAY[0]), token); if (token !== qAbort) return; }
     for (let r = 0; r < R; r++) {
       stage.innerHTML = `${head(0, a)}${ayaHtml(su.v[a], a + 1, false)}<div class="reps">${Array.from({ length: R }, (_, k) => `<i class="${k <= r ? 'on' : ''}"></i>`).join('')}</div><div class="turn">اسمعي وركّزي</div><div class="qbar"><i id="qb"></i></div><div id="qerr" class="turn" style="font-size:15px;color:var(--red)"></div>`;
       await playAya(su.n, a + 1, token); if (token !== qAbort) return; await wait(500, token);
@@ -3093,11 +3099,13 @@ async function hifz(si) {
       stage.innerHTML = `${head(1, a)}${ayaHtml(su.v[a], a + 1, false)}<div class="reps">${Array.from({ length: R }, (_, k) => `<i class="${k <= r ? 'on' : ''}"></i>`).join('')}</div><div class="turn" id="tn">اسمعي الشيخ…</div><div class="qbar"><i id="qb"></i></div>`;
       const d = await playAya(su.n, a + 1, token); if (token !== qAbort) return;
       $('#tn').textContent = 'دورك! ردّديها بصوت عالي'; buzz(20);
+      await qSay(qSayT(r === 0 ? Q_SAY[1] : Q_SAY[2]), token); if (token !== qAbort) return;
       await wait(Math.max(2500, d * 1300), token); if (token !== qAbort) return;
     }
     // ٣) تسمّع: الآية مخفية إلا أول كلمة، وتكشف كلمة إذا نست
     const ok = await new Promise((res) => {
       stage.innerHTML = `${head(2, a)}${ayaHtml(su.v[a], a + 1, true)}<div class="turn">سمّعي الآية من حفظك</div><div class="row"><button class="ghost glass" id="rv">نسيت، أظهري كلمة</button><button class="cta" id="okb">${ic('check')}قلتها صح</button></div><button class="ghost" id="lis" style="color:var(--txt2)">اسمعيها مرة ثانية</button>`;
+      speak(qSayT(Q_SAY[3]), .9);
       $('#rv').onclick = () => { const h = document.querySelector('.aya .w.hid'); if (h) { h.classList.remove('hid'); h.classList.add('rev'); reveals++; sfx('tap'); } };
       $('#lis').onclick = () => playAya(su.n, a + 1, token);
       $('#okb').onclick = () => { document.querySelectorAll('.aya .w.hid').forEach((w) => w.classList.remove('hid')); sfx('ok'); res(true); };
@@ -3107,9 +3115,10 @@ async function hifz(si) {
     // ٤) تربط: تسمع الآيات من أول السورة لين هذي، وتسمّعها
     if (a > 0) {
       stage.innerHTML = `${head(3, a)}<div class="turn">نربط الآيات: اسمعي من البداية</div><div class="qbar"><i id="qb"></i></div><div id="linkv" class="aya glass" style="font-size:clamp(24px,5vw,34px)"></div>`;
+      await qSay(qSayT(Q_SAY[4]), token); if (token !== qAbort) return;
       for (let b = Math.max(0, a - 3); b <= a; b++) { if (token !== qAbort) return; $('#linkv').innerHTML = su.v[b] + ` <span class="num">﴿${AR(b + 1)}﴾</span>`; await playAya(su.n, b + 1, token); }
       if (token !== qAbort) return;
-      await new Promise((res) => { stage.innerHTML = `${head(3, a)}<div class="turn">سمّعي من الآية ${AR(Math.max(1, a - 2))} لين ${AR(a + 1)} بدون ما تشوفين</div><div class="aya glass" style="font-size:clamp(22px,4.5vw,30px)">${su.v.slice(Math.max(0, a - 3), a + 1).map((t, i) => `<span class="w rev">${t.split(/\s+/)[0]}</span> …`).join('<br>')}</div><button class="cta" id="okl">${ic('check')}سمّعتها</button>`; $('#okl').onclick = () => { sfx('ok'); res(); }; });
+      await new Promise((res) => { setTimeout(() => speak(qSayT(Q_SAY[5]), .9), 300); stage.innerHTML = `${head(3, a)}<div class="turn">سمّعي من الآية ${AR(Math.max(1, a - 2))} لين ${AR(a + 1)} بدون ما تشوفين</div><div class="aya glass" style="font-size:clamp(22px,4.5vw,30px)">${su.v.slice(Math.max(0, a - 3), a + 1).map((t, i) => `<span class="w rev">${t.split(/\s+/)[0]}</span> …`).join('<br>')}</div><button class="cta" id="okl">${ic('check')}سمّعتها</button>`; $('#okl').onclick = () => { sfx('ok'); res(); }; });
     }
     S.q = S.q || {}; S.q[su.n] = { done: a + 1, stars: qprog(su.n).stars }; save(); markDay();
   }
@@ -5698,6 +5707,7 @@ function voiceExtra() {
   add(`أحسنتِ يا ${name}! صباحك سعيد. أول شي: صليتي الفجر؟ وبعدين نغسل وجهنا ونلبس ونفطر`);
   add('بطلة! يومك كله خير، بالتوفيق في المدرسة'); add('يلا كمّلي تجهيزك، وبالتوفيق يا ' + name); add('تقبّل الله يا ' + name + '! أحسنتِ');
   add('ما شاء الله! تقبّل الله صلاتك');
+  try { Q_SAY.forEach(add); } catch {}
   for (let n = 1; n <= 30; n++) { add('باقي ' + n + ' نجمة للهدية الجاية'); add('تعلّمي ' + AR(n) + ' حروف أول، وينفتح لكِ'); }
   for (let n = 0; n <= 12; n++) add(AR(n));
   // لعبة التسوّق
