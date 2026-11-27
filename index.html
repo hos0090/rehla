@@ -1245,6 +1245,8 @@ body.wtnlock #view{overflow:hidden!important;touch-action:none}
 #stage .opt.armed{outline:5px solid #8b5cf6!important;outline-offset:3px;transform:scale(1.04);background:#f4efff!important}
 #stage .opt.armed::after{content:'المسي مرة ثانية ✓';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);background:#8b5cf6;color:#fff;font:700 13px/1 var(--ui,sans-serif);padding:6px 10px;border-radius:99px;white-space:nowrap;box-shadow:0 4px 10px rgba(93,63,166,.35);pointer-events:none;animation:pulseA 1.2s ease-in-out infinite}
 @keyframes pulseA{50%{transform:translateX(-50%) scale(1.08)}}
+/* ٢.٠ حسام: «نسخة الآيباد فيها أشياء ما تشتغل، نستغني عنها»: اللي يحتاج التابلت يختفي في نسخة المتصفح */
+.webv .tab[data-t="apps"],.webv #sysbar,.webv #goT,.webv #goCall,.webv #goCall2,.webv #goSch{display:none!important}
 </style>
 
 <div id="space"></div><canvas id="stars"></canvas><div class="orb a"></div><div class="orb b"></div>
@@ -1601,6 +1603,7 @@ function toast(t, ms) {
 }
 /* ===== الصوت واللمس ===== */
 const NATIVE = window.Android && typeof Android.speak === 'function';
+if (!NATIVE) try { document.documentElement.classList.add('webv'); document.addEventListener('DOMContentLoaded', () => document.body.classList.add('webv')); if (document.body) document.body.classList.add('webv'); } catch {}
 let voice = null;
 function pickVoice() { try { const v = speechSynthesis.getVoices() || []; voice = v.find((x) => /^ar(-|_)SA/i.test(x.lang)) || v.find((x) => /^ar/i.test(x.lang)) || null; } catch {} }
 
@@ -1650,6 +1653,10 @@ function wvInit() {
   addEventListener('touchend', unlock, true); addEventListener('click', unlock, true);
 }
 const wvClean = (x) => String(x).replace(/\s+/g, ' ').trim();
+/** أجزاء الجملة حول الاسم (بدون الاسم نفسه)، وبدون علامات الترقيم في أولها */
+function nameSegs(t, re) {
+  return String(t).replace(re, (m, p) => p + '\u0000').split('\u0000').map((x) => wvClean(x.replace(/^[.،,!؟?:\s]+/, ''))).filter(Boolean);
+}
 const wvStrip = (x) => wvClean(x).replace(/[.،,!؟?:\s]+$/, '');
 const wvSents = (t) => wvClean(t).split(/(?<=[.!؟?])\s+/).filter(Boolean);
 const wvClauses = (sen) => wvClean(sen).split(/(?<=[،,:])\s*/).map(wvStrip).filter(Boolean);
@@ -1660,6 +1667,26 @@ function wvFind(x) {
   return WV.m[a] || WV.m[b] || WV.m[b + '.'] || WV.m[b + '!'] || WV.m[b + '؟'] || null;
 }
 function wvParts(t) {
+  const f = wvFind(t); if (f) return [f];
+  // ٢.٠: جملة فيها اسم الطفل (غير وتين): الجزء قبل الاسم + الاسم + الجزء بعده
+  const nm = kidName();
+  if (nm !== 'وتين' && t.indexOf(nm) >= 0) {
+    const esc = nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(^|[^\\u0621-\\u064A]|[لوب])' + esc + '(?![\\u0621-\\u064A])', 'g');
+    if (re.test(t)) {
+      re.lastIndex = 0;
+      const segs = String(t).replace(re, (m, p) => p + '\u0000').split('\u0000'), out = [];
+      segs.forEach((seg, k) => {
+        if (k) { const g = wvFind(nm); if (g) out.push(g); else wvNoteMiss(nm); }
+        const x = wvClean(seg.replace(/^[.،,!؟?:\s]+/, ''));
+        if (x) out.push(...wvPlain(x));
+      });
+      return out;
+    }
+  }
+  return wvPlain(t);
+}
+function wvPlain(t) {
   const f = wvFind(t); if (f) return [f];
   const out = [];
   // نقسم عند نهاية الجملة أول، وبعدين عند الفواصل
@@ -2307,12 +2334,26 @@ function setupPanel() {
   $('#sB').onclick = devicePanel;
 }
 
+/** ٢.٠: ركن الكبار في نسخة الآيباد والآيفون (بدون تحكم بالجهاز) */
+function webAdult() {
+  $('#parent').hidden = false;
+  $('#psheet').innerHTML = `<div class="phead"><h3>للكبار</h3></div>
+    <p class="hint">هذي نسخة الآيباد والآيفون: الدروس والألعاب والقرآن كلها فيها. وقت اللعب والنوم والمنبه وقفل التطبيقات تشتغل في التابلت بس (للمنبه استخدم منبه الجهاز نفسه).</p>
+    <div class="ptiles"><button class="ptile" id="waName" data-nosay><span class="pi">✏️</span><b>الاسم</b><small>${kidName()}</small></button>
+    <button class="ptile" id="waLv" data-nosay><span class="pi">🎯</span><b>المستوى</b><small>وين وصلت في المدرسة</small></button>
+    <button class="ptile" id="waReset" data-nosay><span class="pi">🧹</span><b>من البداية</b><small>يمسح تقدّم هالجهاز بس</small></button></div>
+    <div class="pb" style="margin-top:14px"><button class="ghost glass" id="waX" data-nosay>رجوع</button></div>`;
+  $('#waX').onclick = () => { $('#parent').hidden = true; };
+  $('#waName').onclick = () => nameAsk(() => { $('#parent').hidden = true; go(tab); });
+  $('#waLv').onclick = () => { $('#parent').hidden = true; placeView(); };
+  $('#waReset').onclick = () => askBox('نمسح تقدّم ' + kidName() + ' في هالجهاز كله ونبدأ من الصفر؟ ما ينرجع.', 'إيه امسح', () => { const nm = S.name; S = { stars: {}, streak: 0, last: '', days: [], open: 0, name: nm, nameSet: 1, best: {}, planet: 0 }; save(); location.reload(); });
+}
 /* ===== أنا ===== */
 function meView() {
   $('#view').innerHTML = `<div class="inner">${header()}<div class="today glass"><div class="lt girl2"><img src="${ART.girl}" alt=""></div><div class="tx"><small>رحلتي</small><b>${AR(Object.keys(S.stars).length)} حرف · ${AR(total())} نجمة</b><div class="bar"><i style="width:${Object.keys(S.stars).length / 28 * 100}%"></i></div></div></div>
     ${winsHtml()}<div class="sec"><h2>صلاتي اليوم</h2></div><div class="prrow me">${PR_N.map((n, k) => `<button class="${prDay()[k] ? 'on' : ''}" data-p="${k}">🕌<br>${n}</button>`).join('')}</div>
     <div class="sec"><h2>للكبار</h2></div><button class="game glass wide" id="pr" style="min-height:110px"><div class="art" style="background:linear-gradient(140deg,#6b7a99,#38425e)">${ic('shield')}</div><b>ركن بابا وماما</b><small>التقدم بالتفصيل والإعدادات</small></button></div>`;
-  $('#pr').onclick = gate;
+  $('#pr').onclick = NATIVE ? gate : webAdult;
   document.querySelectorAll('.prrow.me button').forEach((b) => (b.onclick = () => { sfx('tap'); salahCall(+b.dataset.p); }));
   if ($('#gOpen')) $('#gOpen').onclick = openGift;
 }
@@ -5689,7 +5730,13 @@ function voiceCatalog(names) {
   try { allPhrases().forEach(add); } catch {}
   try { voiceExtra().forEach(add); } catch {}
   const base = [...out];
-  (names || []).forEach((n) => { n = String(n).trim(); if (!n || n === 'وتين') return; base.forEach((t) => { if (t.indexOf('وتين') >= 0) add(t.replace(NAME_RE, (m, p) => p + n)); }); });
+  // ٢.٠ حسام: «الجمل غير وتين = اسم الطفل». بدل ما نولّد كل جملة فيها اسم الطفل كاملة، نولّد الأجزاء اللي حول الاسم
+  // (مرة وحدة وتنفع لأي طفل) + اسم كل طفل لحاله. نسخة الآيباد تقسم الجملة بنفس الطريقة (wvParts)
+  const others = (names || []).map((n) => String(n).trim()).filter((n) => n && n !== 'وتين');
+  if (others.length) {
+    base.forEach((t) => { if (t.indexOf('وتين') >= 0) nameSegs(t, NAME_RE).forEach(add); });
+    others.forEach(add);
+  }
   return [...out];
 }
 /** نخطط: الجملة الكاملة لو متحمّلة نأخذها، ولو لا ناخذ جملها، ولو لا ناخذ مقاطعها (والمقاطع تتكرر كثير فالتكلفة أقل بكثير) */
@@ -6068,7 +6115,7 @@ function voicePanel() {
       let i = {}; try { i = JSON.parse(Android.shareInfo()); } catch {}
       const e = $('#ghS'); if (!e) return;
       e.textContent = i.on ? '✓ شغّال: أول ما ينفتح التطبيق يرفع الأصوات الجديدة لرابط الآيباد. ' + (i.running ? 'يرفع الحين… ' : '') + (i.msg || '') + (i.n ? ' · المرفوع كله: ' + AR(i.n) + ' صوت' : '')
-        : 'مطفي: الصق مفتاح قيت هب (مقصور على مستودع rehla) عشان التابلت يرفع أصواته بنفسه.';
+        : 'مطفي: الصق مفتاح قيت هب (مقصور على مستودع rehla) عشان التابلت يرفع أصواته بنفسه.' + (i.msg ? ' · آخر محاولة: ' + i.msg : '');
     };
     ghPaint(); const gt = setInterval(() => { if (!$('#ghS')) return clearInterval(gt); ghPaint(); }, 3000);
     $('#ghOk').onclick = () => {
@@ -6361,15 +6408,18 @@ if (!S.badges) { S.badges = badgeList().filter((b) => b[3] >= b[4]).map((b) => b
 function shareAuto() {
   if (!NATIVE || !Android.shareInfo || !Android.voiceShare) return;
   let i = {}; try { i = JSON.parse(Android.shareInfo()); } catch { return; }
-  if (i.running || (i.on && Date.now() - (i.at || 0) < 10 * 60e3)) return;   // ١.٩٧: بدون مفتاح كمان (يشيك على المفتاح المشفّر)
+  if (i.running || (i.on && Date.now() - (i.at || 0) < 5 * 60e3)) return;   // ١.٩٧: بدون مفتاح كمان (يشيك على المفتاح المشفّر)
   try {
     let names = []; try { names = String(store.get('packNames', 'ميلا')).split(/[،,\s]+/).filter(Boolean); } catch {}
     const cand = new Set();
-    voiceCatalog(names).forEach((t) => { cand.add(t); wvSents(t).forEach((sn) => { cand.add(sn); wvClauses(sn).forEach((c) => cand.add(c)); }); });
+    voiceCatalog(names).forEach((t) => { cand.add(t); wvSents(t).forEach((sn) => { cand.add(sn); wvClauses(sn).forEach((c) => cand.add(c)); }); });   // فيها أجزاء جمل الاسم
     Android.voiceShare(JSON.stringify([...cand]));
   } catch {}
 }
 setTimeout(shareAuto, 40000);
+// ١.٩٨: التطبيق هو الشاشة الرئيسية فالصفحة تبقى مفتوحة أيام: نعيد المحاولة، وكل ما يرجع للشاشة (الجافا يمنع التكرار). ١.٩٩ حسام: «كل ٥ دقايق»
+setInterval(shareAuto, 5 * 60e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(shareAuto, 20000); });
 function boot2() {
   $('#parent').hidden = true; nameApply();
   if (!S.placed) placeView(); else { go('home'); teacherDaily(); }
